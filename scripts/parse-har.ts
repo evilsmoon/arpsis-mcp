@@ -27,7 +27,12 @@ interface HarFile {
 interface EndpointRecord {
   method: string;
   url: string;
+  /** Concrete path from the first captured entry (kept for reference). */
   path: string;
+  /** Path with UUIDs and ISO dates replaced by {id}/{date} — the shape used to
+   *  render the API map and to key the dedup, so two requests hitting the same
+   *  endpoint with different ids collapse into one row. */
+  pathPattern: string;
   host: string;
   sampleBody?: string;
   status?: number;
@@ -46,14 +51,17 @@ function redact(text: string): string {
     .replace(/"refresh_token"\s*:\s*"[^"]+"/g, '"refresh_token":"[REDACTED]"');
 }
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const DATE_RE = /\d{4}-\d{2}-\d{2}/g;
+
+function normalizePath(pathname: string): string {
+  return pathname.replace(UUID_RE, "{id}").replace(DATE_RE, "{date}");
+}
+
 function endpointKey(method: string, url: string): string {
   try {
     const u = new URL(url);
-    const path = u.pathname.replace(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-      "{id}",
-    );
-    return `${method} ${u.host}${path}`;
+    return `${method} ${u.host}${normalizePath(u.pathname)}`;
   } catch {
     return `${method} ${url}`;
   }
@@ -90,6 +98,7 @@ async function parseHarFile(filePath: string, source: string, map: Map<string, E
         method,
         url: `${u.origin}${u.pathname}`,
         path: u.pathname,
+        pathPattern: normalizePath(u.pathname),
         host,
         sampleBody: body,
         status: entry.response?.status,
@@ -112,7 +121,7 @@ async function main() {
   }
 
   const endpoints = [...map.values()].sort((a, b) =>
-    `${a.host}${a.path}`.localeCompare(`${b.host}${b.path}`),
+    `${a.host}${a.pathPattern}`.localeCompare(`${b.host}${b.pathPattern}`),
   );
 
   await mkdir(dirname(OUT_JSON), { recursive: true });
@@ -131,12 +140,12 @@ async function main() {
   ];
 
   for (const e of endpoints) {
-    lines.push(`| ${e.method} | ${e.host} | \`${e.path}\` | ${e.sources.join(", ")} |`);
+    lines.push(`| ${e.method} | ${e.host} | \`${e.pathPattern}\` | ${e.sources.join(", ")} |`);
   }
 
   lines.push("", "## Sample bodies (redacted)", "");
   for (const e of endpoints.filter((x) => x.sampleBody)) {
-    lines.push(`### ${e.method} ${e.path}`, "", "```json", e.sampleBody!, "```", "");
+    lines.push(`### ${e.method} ${e.pathPattern}`, "", "```json", e.sampleBody!, "```", "");
   }
 
   await writeFile(OUT_MD, lines.join("\n"));

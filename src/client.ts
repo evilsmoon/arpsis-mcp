@@ -27,6 +27,10 @@ export class ArpsisClient {
     return this.request<T>("PUT", path, body);
   }
 
+  async delete<T>(path: string): Promise<T> {
+    return this.request<T>("DELETE", path);
+  }
+
   async getUserInfo(): Promise<Record<string, unknown>> {
     const token = await this.auth.getAccessToken();
     const res = await fetch(`${this.config.authority}/connect/userinfo`, {
@@ -115,6 +119,6 @@ export function wrapCommentHtml(text: string, mentions?: Array<{ userId: string;
   return `<p>${escapeHtml(text)} ${parts.join(" ")} </p>`;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

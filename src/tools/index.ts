@@ -3,7 +3,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArpsisClient } from "../client.js";
-import { wrapCommentHtml } from "../client.js";
+import { wrapCommentHtml, escapeHtml } from "../client.js";
 import type { ArpsisConfig } from "../config.js";
 
 function jsonResult(data: unknown) {
@@ -1069,6 +1069,300 @@ export function registerArpsisTools(
     async ({ projectTraceIds }) => {
       try {
         const data = await client.put("/ProjectTraces/SetManyRead", { projectTraceIds });
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: create requirement (POST /Requirements) ---
+  server.registerTool(
+    "arpsis_create_requirement",
+    {
+      description:
+        "Create a new requirement (backlog item) under a functional/group. HTML description is wrapped automatically; pass descriptionText as plain text.",
+      inputSchema: {
+        projectId: z.string().uuid().optional().describe("Project UUID (uses default if omitted)"),
+        functionalId: z.string().uuid(),
+        groupId: z.string().uuid(),
+        name: z.string().min(1),
+        developerId: z.string().uuid().optional().describe("Owner developer (defaults to current user)"),
+        order: z.number().int().optional().describe("Display order in the backlog"),
+        activityStatusId: z.number().int().optional().describe("Initial status code (default 1 = todo)"),
+        score: z.number().int().min(0).optional(),
+        descriptionText: z.string().optional().describe("Plain text; wrapped as <p>…</p>"),
+        dependencyIds: z.array(z.string().uuid()).optional(),
+      },
+    },
+    async ({ projectId, functionalId, groupId, name, developerId, order, activityStatusId, score, descriptionText, dependencyIds }) => {
+      try {
+        const pid = projectId ?? config.defaultProjectId;
+        if (!pid) return errorResult("projectId required (no default set)");
+        const dev = developerId ?? (await resolveCurrentUserId(client)) ?? undefined;
+        if (!dev) return errorResult("developerId required (could not resolve current user)");
+        const body = {
+          projectId: pid,
+          functionalId,
+          groupId,
+          name,
+          developerId: dev,
+          order: order ?? 1,
+          activityStatusId: activityStatusId ?? 1,
+          score: score ?? 1,
+          description: {
+            content: descriptionText ? `<p>${escapeHtml(descriptionText)}</p>` : "<p></p>",
+            attachments: [],
+          },
+          dependencyIds: dependencyIds ?? [],
+          dependencies: [],
+        };
+        const data = await client.post("/Requirements", body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: delete requirement ---
+  server.registerTool(
+    "arpsis_delete_requirement",
+    {
+      description:
+        "DESTRUCTIVE: permanently delete a requirement. This cannot be undone. Confirm the ID first — a typo will delete someone else's work.",
+      inputSchema: {
+        requirementId: z.string().uuid(),
+      },
+    },
+    async ({ requirementId }) => {
+      try {
+        const data = await client.delete(`/Requirements/${requirementId}`);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: create sprint ---
+  server.registerTool(
+    "arpsis_create_sprint",
+    {
+      description: "Create a new sprint. Dates in YYYY-MM-DD.",
+      inputSchema: {
+        projectId: z.string().uuid().optional().describe("Project UUID (uses default if omitted)"),
+        functionalId: z.string().uuid(),
+        number: z.string().min(1).describe("Sprint number/code (e.g. \"2\")"),
+        name: z.string().min(1),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
+        workHoursByDay: z.number().min(1).optional().describe("Hours per work day (default 7)"),
+        plannedHours: z.number().min(0).optional(),
+        sprintStatus: z.number().int().optional().describe("Status code (default 1)"),
+        typeControl: z.number().int().optional().describe("Type control (default 1)"),
+      },
+    },
+    async ({ projectId, functionalId, number, name, startDate, endDate, workHoursByDay, plannedHours, sprintStatus, typeControl }) => {
+      try {
+        const pid = projectId ?? config.defaultProjectId;
+        if (!pid) return errorResult("projectId required (no default set)");
+        const body = {
+          projectId: pid,
+          functionalId,
+          number,
+          name,
+          startDate,
+          endDate,
+          workHoursByDay: workHoursByDay ?? 7,
+          plannedHours: plannedHours ?? 0,
+          workedHours: 0,
+          sprintStatusId: "",
+          typeControl: typeControl ?? 1,
+          sprintStatus: sprintStatus ?? 1,
+        };
+        const data = await client.post("/Sprints", body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: create activity group (feature/epic) ---
+  server.registerTool(
+    "arpsis_create_activity_group",
+    {
+      description: "Create a new activity group (feature / epic) inside a functional module.",
+      inputSchema: {
+        projectId: z.string().uuid().optional().describe("Project UUID (uses default if omitted)"),
+        functionalId: z.string().uuid(),
+        supplierId: z.string().uuid(),
+        systemId: z.string().uuid(),
+        code: z.string().optional().describe("Group code (server assigns if empty)"),
+        name: z.string().min(1),
+        descriptionText: z.string().optional().describe("Plain text; wrapped as <p>…</p>"),
+      },
+    },
+    async ({ projectId, functionalId, supplierId, systemId, code, name, descriptionText }) => {
+      try {
+        const pid = projectId ?? config.defaultProjectId;
+        if (!pid) return errorResult("projectId required (no default set)");
+        const body = {
+          projectId: pid,
+          functionalId,
+          supplierId,
+          systemId,
+          code: code ?? "",
+          name,
+          description: {
+            content: descriptionText ? `<p>${escapeHtml(descriptionText)}</p>` : "<p></p>",
+            attachments: [],
+          },
+          error: "",
+        };
+        const data = await client.post("/ActivityGroups", body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: delete activity group ---
+  server.registerTool(
+    "arpsis_delete_activity_group",
+    {
+      description:
+        "DESTRUCTIVE: permanently delete an activity group and cascade its children (requirements/activities). This cannot be undone. Confirm the ID before calling.",
+      inputSchema: {
+        activityGroupId: z.string().uuid(),
+      },
+    },
+    async ({ activityGroupId }) => {
+      try {
+        const data = await client.delete(`/ActivityGroups/${activityGroupId}`);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: create test case ---
+  server.registerTool(
+    "arpsis_create_test_case",
+    {
+      description: "Create a QA test case linked to a requirement.",
+      inputSchema: {
+        projectId: z.string().uuid().optional().describe("Project UUID (uses default if omitted)"),
+        functionalId: z.string().uuid(),
+        groupId: z.string().uuid(),
+        requirementId: z.string().uuid(),
+        name: z.string().min(1),
+        template: z.number().int().optional().describe("Template code (default 1)"),
+        type: z.number().int().optional().describe("Type code (default 2)"),
+        priority: z.number().int().optional().describe("Priority code (default 1)"),
+        estimate: z.number().min(0).optional().describe("Estimated effort (default 1)"),
+        itemStatusCode: z.number().int().optional().describe("Initial status (default 1)"),
+      },
+    },
+    async ({ projectId, functionalId, groupId, requirementId, name, template, type, priority, estimate, itemStatusCode }) => {
+      try {
+        const pid = projectId ?? config.defaultProjectId;
+        if (!pid) return errorResult("projectId required (no default set)");
+        const body = {
+          projectId: pid,
+          functionalId,
+          groupId,
+          requirementId,
+          name,
+          template: template ?? 1,
+          type: type ?? 2,
+          priority: priority ?? 1,
+          estimate: estimate ?? 1,
+          preconditions: {},
+          steps: {},
+          expected: {},
+          itemStatusCode: itemStatusCode ?? 1,
+        };
+        const data = await client.post("/TestCases", body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: full update of test case ---
+  server.registerTool(
+    "arpsis_update_test_case",
+    {
+      description:
+        "Full test case update (PUT /TestCases/:id). Fetch the test case first, mutate, then pass here — this replaces the whole object. For simple field changes prefer arpsis_patch_test_case.",
+      inputSchema: {
+        testCaseId: z.string().uuid(),
+        body: z
+          .record(z.unknown())
+          .describe("Full test case object (id, projectId, groupId, requirementId, name, preconditions{content,attachments}, steps, expected, …)"),
+      },
+    },
+    async ({ testCaseId, body }) => {
+      try {
+        const data = await client.put(`/TestCases/${testCaseId}`, body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: quirurgical patch of test case ---
+  server.registerTool(
+    "arpsis_patch_test_case",
+    {
+      description:
+        "Quirurgical patch of a test case: only name / estimate / type / status / requirement, without re-sending preconditions/steps/expected. Uses PUT /TestCases/Update2/:id.",
+      inputSchema: {
+        testCaseId: z.string().uuid(),
+        requirementId: z.string().uuid(),
+        name: z.string().min(1),
+        estimate: z.number().min(0),
+        itemStatusCode: z.number().int(),
+        type: z.number().int(),
+      },
+    },
+    async ({ testCaseId, requirementId, name, estimate, itemStatusCode, type }) => {
+      try {
+        const body = { id: testCaseId, requirementId, name, estimate, itemStatusCode, type };
+        const data = await client.put(`/TestCases/Update2/${testCaseId}`, body);
+        return jsonResult(data);
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : "Unknown error");
+      }
+    },
+  );
+
+  // --- Write: quirurgical patch of activity ---
+  server.registerTool(
+    "arpsis_patch_activity",
+    {
+      description:
+        "Quirurgical patch of an activity: only name / order / hours / status / developer, without re-sending description/note. Uses PUT /Activities/Update2/:id. For full-object updates use arpsis_update_activity.",
+      inputSchema: {
+        activityId: z.string().uuid(),
+        name: z.string().min(1),
+        plannedHours: z.number().min(0),
+        order: z.number().int(),
+        itemStatusCode: z.number().int(),
+        activityStatus: z.number().int(),
+        developerId: z.string().uuid(),
+      },
+    },
+    async ({ activityId, name, plannedHours, order, itemStatusCode, activityStatus, developerId }) => {
+      try {
+        const body = { id: activityId, name, plannedHours, order, itemStatusCode, activityStatus, developerId };
+        const data = await client.put(`/Activities/Update2/${activityId}`, body);
         return jsonResult(data);
       } catch (e) {
         return errorResult(e instanceof Error ? e.message : "Unknown error");
