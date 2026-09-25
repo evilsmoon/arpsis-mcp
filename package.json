@@ -8,6 +8,8 @@
     "start-http": "bun run src/server-http.ts",
     "parse-har": "bun run scripts/parse-har.ts",
     "smoke-test": "bun run scripts/smoke-test.ts",
+    "set-token": "bun run scripts/set-token.ts",
+    "set-session": "bun run scripts/set-session.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

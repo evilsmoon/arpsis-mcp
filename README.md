@@ -142,9 +142,12 @@ The image runs as non-root (`bun` user), sets `ARPSIS_HTTP_HOST=0.0.0.0` for con
 
 When you update `ARPSIS_ACCESS_TOKEN` in `.env`, the next MCP tool call reloads the file automatically. Restart MCP only if you change `mcp.json` or the server crashes.
 
+Use `bun run set-token` instead of editing `.env` by hand. It accepts a bare JWT, a full `Authorization: Bearer ...` header, or the oidc-client JSON blob from Session Storage; it rewrites only the `ARPSIS_ACCESS_TOKEN` line, refuses an already-expired token, prints the expiry, and verifies the token against `/connect/userinfo`. It never echoes the token. Run it with no argument to paste interactively so the token stays out of shell history.
+
 ## Scripts
 
 - `bun run start` — start MCP server (stdio; waits silently — normal)
+- `bun run set-token` — replace `ARPSIS_ACCESS_TOKEN` in `.env` (paste interactively; validates + verifies)
 - `bun run smoke-test` — auth + API smoke checks
 - `bun run parse-har` — merge HAR fixtures → `docs/api-map.md`
 - `bun run typecheck` — TypeScript check

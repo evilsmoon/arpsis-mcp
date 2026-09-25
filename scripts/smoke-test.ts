@@ -16,9 +16,9 @@ async function runSmokeTest(): Promise<number> {
   const config = loadConfig();
   const results: SmokeResult[] = [];
 
-  if (!config.accessToken && !config.refreshToken && !config.clientSecret) {
+  if (!config.accessToken && !config.refreshToken && !config.clientSecret && !config.sessionCookie) {
     console.error(
-      "Missing auth: add ARPSIS_ACCESS_TOKEN (or ARPSIS_REFRESH_TOKEN) to .env",
+      "Missing auth: run `bun run set-session`, or add ARPSIS_ACCESS_TOKEN (or ARPSIS_REFRESH_TOKEN) to .env",
     );
     return 1;
   }

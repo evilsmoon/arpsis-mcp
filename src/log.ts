@@ -17,7 +17,7 @@ function redact(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(redact);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = /token|secret|authorization/i.test(k) ? "[REDACTED]" : redact(v);
+      out[k] = /token|secret|authorization|cookie/i.test(k) ? "[REDACTED]" : redact(v);
     }
     return out;
   }

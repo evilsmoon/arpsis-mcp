@@ -911,7 +911,8 @@ export function registerArpsisTools(
   server.registerTool(
     "arpsis_create_activity",
     {
-      description: "Create a new activity under a functional group/requirement",
+      description:
+        "Create a new activity under a functional group/requirement. Accepts noteContent so the description is set in the same call — ARPSIS's own create form sends note.content at creation time (confirmed from a live Postman capture), it just isn't returned by GET until you pass it here.",
       inputSchema: {
         projectId: z.string().uuid(),
         functionalId: z.string().uuid(),
@@ -925,6 +926,10 @@ export function registerArpsisTools(
         activityStatus: z.number().int().optional(),
         itemStatusCode: z.number().int().optional(),
         score: z.number().optional(),
+        noteContent: z
+          .string()
+          .optional()
+          .describe("HTML description, e.g. <p><strong>Descripción:</strong><br>...</p>. Sent as note.content at creation."),
       },
     },
     async (input) => {
@@ -944,6 +949,7 @@ export function registerArpsisTools(
           plannedHours: input.plannedHours ?? 1,
           workedHours: 0,
           references: "",
+          note: { content: input.noteContent ?? "", attachments: [] },
           developerId: input.developerId,
           developerName: input.developerName ?? "",
           isEditing: true,
@@ -1431,7 +1437,7 @@ async function fetchActivitiesUser(
     activityStatuss: number[];
   },
 ): Promise<unknown> {
-  const url = new URL(`${config.apiBase}/Activities/User`);
+  const url = new URL("/Activities/User", "http://placeholder");
   if (opts.projectId) url.searchParams.set("projectId", opts.projectId);
   if (opts.sprintId) url.searchParams.set("sprintId", opts.sprintId);
   url.searchParams.set("developerId", "");
