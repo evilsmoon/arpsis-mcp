@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "arpsis": {
+      "type": "stdio",
+      "command": "C:/Users/Administrator/.bun/bin/bun.exe",
+      "args": [
+        "run",
+        "C:/Users/Administrator/Documents/CITYTECH/arpsis-mcp/src/index.ts"
+      ]
+    }
+  }
+}
